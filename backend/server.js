@@ -10,22 +10,43 @@ const verificarToken = require("./src/middleware/verificarToken");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// CONFIGURACION DEL SERVIDOR
+const origenesPermitidos = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    process.env.FRONTEND_URL
+].filter(Boolean);
 
-app.use(
-    cors({
-        origin: [
-            "http://localhost:5173",
-            "http://127.0.0.1:5173"
-        ]
-    })
-);
+app.use(cors({
+    origin: origenesPermitidos
+}));
 
 app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
 
-// RUTA PRINCIPAL
+// Conexion a MongoDB
+let conexionPendiente;
 
+app.use(async (req, res, next) => {
+    try {
+        if (!conexionPendiente) {
+            conexionPendiente = conectarDB().catch(error => {
+                conexionPendiente = null;
+                throw error;
+            });
+        }
+
+        await conexionPendiente;
+        next();
+    } catch (error) {
+        console.error("Error MongoDB:", error.message);
+        res.status(503).json({
+            ok: false,
+            mensaje: "Base de datos no disponible."
+        });
+    }
+});
+
+// Ruta principal
 app.get("/", (req, res) => {
     res.json({
         proyecto: "Parqueadero-Pro",
@@ -33,8 +54,7 @@ app.get("/", (req, res) => {
     });
 });
 
-// ESTADO DEL SERVIDOR
-
+// Salud
 app.get("/api/salud", (req, res) => {
     res.json({
         ok: true,
@@ -43,31 +63,27 @@ app.get("/api/salud", (req, res) => {
     });
 });
 
-// AUTENTICACION: LOGIN Y REGISTRO PUBLICOS
-
+// Autenticacion
 app.use(
     "/api/auth",
     require("./src/routes/auth.routes")
 );
 
-// REGISTROS DE VEHICULOS PROTEGIDOS
-
+// Registros
 app.use(
     "/api/registros",
     verificarToken,
     require("./src/routes/registros.routes")
 );
 
-// SALIDAS Y PAGOS PROTEGIDOS
-
+// Salidas
 app.use(
     "/api/salidas",
     verificarToken,
     require("./src/routes/salidas.routes")
 );
 
-// REPORTES PROTEGIDOS
-
+// Reportes
 app.get("/api/reportes", verificarToken, async (req, res) => {
     try {
         const Registro = require("./src/models/Registro");
@@ -77,23 +93,15 @@ app.get("/api/reportes", verificarToken, async (req, res) => {
 
         const registros = await Registro.find({
             estado: "finalizado",
-            horaSalida: {
-                $gte: inicio
-            }
-        }).sort({
-            horaSalida: -1
-        });
+            horaSalida: { $gte: inicio }
+        }).sort({ horaSalida: -1 });
 
         const total = registros.reduce(
             (sum, registro) => sum + registro.total,
             0
         );
 
-        res.json({
-            ok: true,
-            registros,
-            total
-        });
+        res.json({ ok: true, registros, total });
 
     } catch (error) {
         console.error("Error al consultar reportes:", error);
@@ -105,8 +113,7 @@ app.get("/api/reportes", verificarToken, async (req, res) => {
     }
 });
 
-// RUTA NO ENCONTRADA
-
+// Ruta inexistente
 app.use((req, res) => {
     res.status(404).json({
         ok: false,
@@ -114,26 +121,14 @@ app.use((req, res) => {
     });
 });
 
-// INICIAR SERVIDOR
+// Vercel utiliza la aplicacion exportada
+module.exports = app;
 
-conectarDB()
-    .then(() => {
-        const server = app.listen(PORT, () => {
-            console.log(
-                `Parqueadero-Pro: http://localhost:${PORT}`
-            );
-        });
-
-        server.on("error", (error) => {
-            console.error(error.message);
-            process.exit(1);
-        });
-    })
-    .catch((error) => {
-        console.error(
-            "No se pudo conectar a MongoDB:",
-            error.message
+// En desarrollo local iniciamos el servidor normalmente
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(
+            `Parqueadero-Pro: http://localhost:${PORT}`
         );
-
-        process.exit(1);
     });
+}
