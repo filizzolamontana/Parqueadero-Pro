@@ -1,0 +1,5 @@
+Abre PowerShell en la carpeta principal del proyecto y ejecuta:
+  powershell -ExecutionPolicy Bypass -File .\Reiniciar-Backend.ps1
+
+El script detiene un proceso node server.js que use el puerto 3000. Si es otro programa, te indica cual es sin cerrarlo.
+El archivo backend/.env no esta incluido por seguridad: conserva el tuyo, con MONGO_URI y JWT_SECRET.
