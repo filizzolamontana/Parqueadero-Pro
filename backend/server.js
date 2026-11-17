@@ -10,14 +10,52 @@ const verificarToken = require("./src/middleware/verificarToken");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Dominios autorizados para acceder al backend.
 const origenesPermitidos = [
     "http://localhost:5173",
+    "http://localhost:5174",
     "http://127.0.0.1:5173",
-    process.env.FRONTEND_URL
+    "http://127.0.0.1:5174",
+    process.env.FRONTEND_URL,
+    "https://parqueadero-8j1n7kfo4-filizzolamontana.vercel.app"
 ].filter(Boolean);
 
+// Permitir tambien despliegues del frontend en Vercel.
+function origenPermitido(origin) {
+    if (!origin) {
+        return true;
+    }
+
+    if (origenesPermitidos.includes(origin)) {
+        return true;
+    }
+
+    try {
+        const url = new URL(origin);
+
+        return (
+            url.protocol === "https:" &&
+            /^parqueadero-[a-z0-9-]+-filizzolamontana\.vercel\.app$/i.test(
+                url.hostname
+            )
+        );
+    } catch {
+        return false;
+    }
+}
+
 app.use(cors({
-    origin: origenesPermitidos
+    origin: (origin, callback) => {
+        if (origenPermitido(origin)) {
+            return callback(null, true);
+        }
+
+        console.warn("Origen CORS rechazado:", origin);
+        return callback(null, false);
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 204
 }));
 
 app.use(express.json({ limit: "1mb" }));
@@ -26,7 +64,7 @@ app.use(morgan("dev"));
 // Conexion a MongoDB
 let conexionPendiente;
 
-app.use(async (req, res, next) => {
+app.use(async(req, res, next) => {
     try {
         if (!conexionPendiente) {
             conexionPendiente = conectarDB().catch(error => {
@@ -39,6 +77,7 @@ app.use(async (req, res, next) => {
         next();
     } catch (error) {
         console.error("Error MongoDB:", error.message);
+
         res.status(503).json({
             ok: false,
             mensaje: "Base de datos no disponible."
@@ -84,7 +123,7 @@ app.use(
 );
 
 // Reportes
-app.get("/api/reportes", verificarToken, async (req, res) => {
+app.get("/api/reportes", verificarToken, async(req, res) => {
     try {
         const Registro = require("./src/models/Registro");
 
@@ -124,7 +163,7 @@ app.use((req, res) => {
 // Vercel utiliza la aplicacion exportada
 module.exports = app;
 
-// En desarrollo local iniciamos el servidor normalmente
+// Servidor local
 if (require.main === module) {
     app.listen(PORT, () => {
         console.log(
