@@ -4,7 +4,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 
 // Cargar los estilos de la aplicación
-import "./CSS/dashboard.css";
+import "./css/dashboard.css";
 import "./CSS/dashboard_lateral.css";
 import "./CSS/login.css";
 
